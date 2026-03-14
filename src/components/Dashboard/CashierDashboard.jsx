@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../Services/api';
-import { 
+import {
   ShoppingCartIcon,
   ClipboardDocumentListIcon,
   ExclamationTriangleIcon,
@@ -13,14 +13,58 @@ import {
 } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
 
+/* ── Skeleton ── */
+const DashboardSkeleton = () => (
+  <div className="p-6 max-w-7xl mx-auto animate-pulse">
+    <div className="flex justify-between items-start mb-6">
+      <div>
+        <div className="skeleton h-7 w-48 rounded-lg mb-2" />
+        <div className="skeleton h-4 w-64 rounded" />
+      </div>
+      <div className="skeleton h-9 w-28 rounded-lg" />
+    </div>
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+      <div className="skeleton h-28 rounded-xl" />
+      <div className="skeleton h-28 rounded-xl" />
+    </div>
+    <div className="skeleton h-5 w-36 rounded mb-4" />
+    <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 mb-6">
+      {[...Array(6)].map((_, i) => <div key={i} className="skeleton h-20 rounded-xl" />)}
+    </div>
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="lg:col-span-2 skeleton h-80 rounded-xl" />
+      <div className="skeleton h-80 rounded-xl" />
+    </div>
+  </div>
+);
+
+/* ── Stat Card ── */
+const StatCard = ({ title, value, icon: Icon, accentColor, bgColor, delay = 0 }) => (
+  <div className="stat-card" style={{ borderLeftColor: accentColor, animationDelay: `${delay}ms` }}>
+    <div className="flex items-center gap-3">
+      <div className="p-2.5 rounded-xl shrink-0" style={{ background: bgColor }}>
+        <Icon className="h-5 w-5" style={{ color: accentColor }} />
+      </div>
+      <div>
+        <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">{title}</p>
+        <p className="text-xl font-bold text-gray-900">{value}</p>
+      </div>
+    </div>
+  </div>
+);
+
+const statusConfig = {
+  pending:   { color: '#ca8a04', bg: '#fefce8', label: 'Pending',   border: '#ca8a04' },
+  preparing: { color: '#2563eb', bg: '#dbeafe', label: 'Preparing', border: '#2563eb' },
+  ready:     { color: '#16a34a', bg: '#dcfce7', label: 'Ready',     border: '#16a34a' },
+  completed: { color: '#6b7280', bg: '#f3f4f6', label: 'Completed', border: '#9ca3af' },
+};
+
 const CashierDashboard = () => {
   const [stats, setStats] = useState({
-    todayOrders: 0,
-    todayRevenue: 0,
-    pendingOrders: 0,
-    preparingOrders: 0,
-    readyOrders: 0,
-    completedOrders: 0
+    todayOrders: 0, todayRevenue: 0,
+    pendingOrders: 0, preparingOrders: 0,
+    readyOrders: 0, completedOrders: 0
   });
   const [recentOrders, setRecentOrders] = useState([]);
   const [lowStockItems, setLowStockItems] = useState([]);
@@ -28,81 +72,42 @@ const CashierDashboard = () => {
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Helper function to safely format currency
-  const formatCurrency = (value) => {
-    const num = parseFloat(value) || 0;
-    return num.toFixed(2);
-  };
+  const formatCurrency = (v) => (parseFloat(v) || 0).toFixed(2);
 
   const fetchCashierData = useCallback(async (showRefresh = false) => {
     if (showRefresh) setRefreshing(true);
-    
     try {
       setError(null);
-      
-      // Use the queue endpoint which cashiers have access to
       const queueRes = await api.get('/orders/queue');
       const queueOrders = queueRes.data || [];
-      
-      // Calculate stats from queue data with safe number conversion
-      const totalRevenue = queueOrders.reduce((sum, order) => {
-        const amount = parseFloat(order.total_amount) || 0;
-        return sum + amount;
-      }, 0);
-      
-      const pending = queueOrders.filter(o => o.status === 'pending').length;
-      const preparing = queueOrders.filter(o => o.status === 'preparing').length;
-      const ready = queueOrders.filter(o => o.status === 'ready').length;
+      const totalRevenue = queueOrders.reduce((s, o) => s + (parseFloat(o.total_amount) || 0), 0);
 
       setStats({
         todayOrders: queueOrders.length,
         todayRevenue: totalRevenue,
-        pendingOrders: pending,
-        preparingOrders: preparing,
-        readyOrders: ready,
-        completedOrders: 0
+        pendingOrders:   queueOrders.filter(o => o.status === 'pending').length,
+        preparingOrders: queueOrders.filter(o => o.status === 'preparing').length,
+        readyOrders:     queueOrders.filter(o => o.status === 'ready').length,
+        completedOrders: 0,
       });
 
-      // Get recent orders from queue with customer info
-      const sortedOrders = [...queueOrders].sort((a, b) => 
-        new Date(b.created_at) - new Date(a.created_at)
-      );
-      
-      // Fetch customer details for each order
-      const ordersWithCustomers = await Promise.all(
-        sortedOrders.slice(0, 5).map(async (order) => {
-          try {
-            // Try to get customer details
-            const customerRes = await api.get(`/customers/${order.user_id}`);
-            return {
-              ...order,
-              customer: customerRes.data?.data || { name: 'Unknown', email: '' }
-            };
-          } catch (error) {
-            // If customer fetch fails, return order with unknown customer
-            return {
-              ...order,
-              customer: { name: 'Unknown Customer', email: '' }
-            };
-          }
-        })
-      );
-      
-      setRecentOrders(ordersWithCustomers);
+      // user is now eager-loaded by the queue endpoint — no extra API calls needed
+      const sorted = [...queueOrders]
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+        .slice(0, 5)
+        .map(order => ({
+          ...order,
+          customer: order.user
+            ? { name: order.user.name, email: order.user.email }
+            : { name: 'Walk-in', email: '' },
+        }));
+      setRecentOrders(sorted);
 
-      // Fetch low stock items
       const lowStockRes = await api.get('/inventory/low-stock');
       setLowStockItems(lowStockRes.data || []);
-
     } catch (error) {
-      console.error('Failed to fetch cashier data:', error);
-      
-      if (error.response?.status === 403) {
-        setError('Permission denied. Please check your cashier account permissions.');
-      } else {
-        setError(error.response?.data?.message || error.message || 'Failed to load dashboard data');
-      }
-      
+      if (error.response?.status === 403) setError('Permission denied.');
+      else setError(error.response?.data?.message || 'Failed to load dashboard data');
       setDemoData();
     } finally {
       setLoading(false);
@@ -110,353 +115,216 @@ const CashierDashboard = () => {
     }
   }, []);
 
-  // Demo data for testing when backend is not available
   const setDemoData = () => {
-    setStats({
-      todayOrders: 24,
-      todayRevenue: 1245.50,
-      pendingOrders: 5,
-      preparingOrders: 3,
-      readyOrders: 2,
-      completedOrders: 14
-    });
-    
+    setStats({ todayOrders: 24, todayRevenue: 1245.50, pendingOrders: 5, preparingOrders: 3, readyOrders: 2, completedOrders: 14 });
     setRecentOrders([
-      {
-        id: 1,
-        order_number: 'ORD-001',
-        total_amount: 45.00,
-        status: 'pending',
-        items: [{ id: 1 }],
-        created_at: new Date().toISOString(),
-        customer: { name: 'John Doe', email: 'john@example.com' }
-      },
-      {
-        id: 2,
-        order_number: 'ORD-002',
-        total_amount: 78.50,
-        status: 'preparing',
-        items: [{ id: 1 }, { id: 2 }],
-        created_at: new Date().toISOString(),
-        customer: { name: 'Jane Smith', email: 'jane@example.com' }
-      },
-      {
-        id: 3,
-        order_number: 'ORD-003',
-        total_amount: 12.00,
-        status: 'ready',
-        items: [{ id: 1 }],
-        created_at: new Date().toISOString(),
-        customer: { name: 'Bob Johnson', email: 'bob@example.com' }
-      }
+      { id: 1, order_number: 'ORD-001', total_amount: 45.00, status: 'pending',   items: [{}], created_at: new Date().toISOString(), customer: { name: 'Juan Dela Cruz', email: 'juan@example.com' } },
+      { id: 2, order_number: 'ORD-002', total_amount: 78.50, status: 'preparing', items: [{},{}], created_at: new Date().toISOString(), customer: { name: 'Maria Santos', email: 'maria@example.com' } },
+      { id: 3, order_number: 'ORD-003', total_amount: 12.00, status: 'ready',     items: [{}], created_at: new Date().toISOString(), customer: { name: 'Bob Reyes', email: 'bob@example.com' } }
     ]);
-    
     setLowStockItems([
-      { id: 1, name: 'Chicken Rice', stock_quantity: 3, low_stock_threshold: 5 },
-      { id: 2, name: 'French Fries', stock_quantity: 5, low_stock_threshold: 10 }
+      { id: 1, name: 'Chicken Rice',  stock_quantity: 3, low_stock_threshold: 5 },
+      { id: 2, name: 'French Fries',  stock_quantity: 5, low_stock_threshold: 10 }
     ]);
   };
 
   useEffect(() => {
     fetchCashierData();
-    
     const interval = setInterval(() => fetchCashierData(true), 30000);
     return () => clearInterval(interval);
   }, [fetchCashierData]);
 
-  const getStatusIcon = (status) => {
-    switch(status) {
-      case 'pending': return <ClockIcon className="h-5 w-5 text-yellow-500" />;
-      case 'preparing': return <ClockIcon className="h-5 w-5 text-blue-500" />;
-      case 'ready': return <CheckCircleIcon className="h-5 w-5 text-green-500" />;
-      case 'completed': return <CheckCircleIcon className="h-5 w-5 text-gray-500" />;
-      default: return null;
-    }
-  };
-
-  const getStatusColor = (status) => {
-    switch(status) {
-      case 'pending': return 'bg-yellow-100 text-yellow-800';
-      case 'preparing': return 'bg-blue-100 text-blue-800';
-      case 'ready': return 'bg-green-100 text-green-800';
-      case 'completed': return 'bg-gray-100 text-gray-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
-
   const handleRestock = async (itemId, itemName) => {
     try {
-      await api.post('/inventory/adjust', {
-        menu_item_id: itemId,
-        quantity: 10,
-        reason: 'restock'
-      });
-      
-      const lowStockRes = await api.get('/inventory/low-stock');
-      setLowStockItems(lowStockRes.data || []);
+      await api.post('/inventory/adjust', { menu_item_id: itemId, quantity: 10, reason: 'restock' });
+      const r = await api.get('/inventory/low-stock');
+      setLowStockItems(r.data || []);
       toast.success(`Restocked ${itemName}`);
-    } catch (error) {
-      console.error('Failed to restock:', error);
+    } catch {
       toast.error('Failed to restock item');
     }
   };
 
-  const StatCard = ({ title, value, icon: Icon, color, bgColor }) => (
-    <div className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition">
-      <div className="flex items-center">
-        <div className={`p-3 rounded-full ${bgColor}`}>
-          <Icon className={`h-6 w-6 ${color}`} />
-        </div>
-        <div className="ml-4">
-          <p className="text-sm font-medium text-gray-600">{title}</p>
-          <p className="text-2xl font-semibold text-gray-900">{value}</p>
-        </div>
-      </div>
-    </div>
-  );
+  if (loading) return <DashboardSkeleton />;
 
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
+  const statItems = [
+    { title: 'Active Orders', value: stats.todayOrders,     icon: ShoppingCartIcon,        accentColor: '#800000', bgColor: '#FEF2F2', delay: 0   },
+    { title: 'Revenue',       value: `₱${formatCurrency(stats.todayRevenue)}`, icon: CurrencyDollarIcon, accentColor: '#16a34a', bgColor: '#dcfce7', delay: 60  },
+    { title: 'Pending',       value: stats.pendingOrders,   icon: ClockIcon,               accentColor: '#ca8a04', bgColor: '#fefce8', delay: 120 },
+    { title: 'Preparing',     value: stats.preparingOrders, icon: ClockIcon,               accentColor: '#2563eb', bgColor: '#dbeafe', delay: 180 },
+    { title: 'Ready',         value: stats.readyOrders,     icon: CheckCircleIcon,         accentColor: '#16a34a', bgColor: '#dcfce7', delay: 240 },
+    { title: 'Completed',     value: stats.completedOrders, icon: CheckCircleIcon,         accentColor: '#6b7280', bgColor: '#f3f4f6', delay: 300 },
+  ];
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen">
-      <div className="max-w-7xl mx-auto">
-        {/* Header with Refresh Button */}
-        <div className="mb-6 flex justify-between items-center">
+    <div className="p-6 max-w-7xl mx-auto">
+      {/* Header */}
+      <div className="mb-6 flex justify-between items-center fade-in-up">
+        <div>
+          <h1 className="text-2xl font-bold" style={{ color: '#800000' }}>Cashier Dashboard</h1>
+          <p className="text-gray-500 text-sm mt-0.5">Ready to take some orders? 🍱</p>
+        </div>
+        <button
+          onClick={() => fetchCashierData(true)}
+          disabled={refreshing}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border border-gray-200 bg-white hover:bg-gray-50 transition-all shadow-sm"
+          style={{ borderColor: refreshing ? '#800000' : undefined, color: '#800000' }}
+        >
+          <ArrowPathIcon className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+          {refreshing ? 'Refreshing…' : 'Refresh'}
+        </button>
+      </div>
+
+      {error && (
+        <div className="mb-5 rounded-xl px-4 py-3 flex gap-3 items-start fade-in-up" style={{ background: '#FEF2F2', border: '1px solid #FECACA' }}>
+          <ExclamationTriangleIcon className="h-5 w-5 mt-0.5 shrink-0" style={{ color: '#800000' }} />
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Cashier Dashboard</h1>
-            <p className="text-gray-600">Welcome back! Ready to take some orders?</p>
+            <p className="font-semibold text-sm" style={{ color: '#800000' }}>Error loading data</p>
+            <p className="text-xs text-red-600 mt-0.5">{error} — Showing demo data.</p>
           </div>
-          <button
-            onClick={() => fetchCashierData(true)}
-            disabled={refreshing}
-            className="flex items-center px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition"
-          >
-            <ArrowPathIcon className={`h-5 w-5 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
-            {refreshing ? 'Refreshing...' : 'Refresh'}
-          </button>
         </div>
+      )}
 
-        {error && (
-          <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
-            <p className="font-medium">⚠️ Error loading data</p>
-            <p className="text-sm">{error}</p>
-            <p className="text-sm mt-2">Showing demo data for preview.</p>
+      {/* Quick Actions */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        <Link to="/pos"
+          className="rounded-2xl p-6 text-white flex items-center justify-between group transition-all duration-300 hover:-translate-y-1 hover:shadow-xl"
+          style={{ background: 'linear-gradient(135deg, #800000 0%, #9B1C1C 100%)' }}
+        >
+          <div>
+            <h2 className="text-xl font-bold mb-1">Point of Sale</h2>
+            <p className="text-white/70 text-sm">Take new orders</p>
           </div>
-        )}
+          <div className="p-4 rounded-2xl bg-white/15 group-hover:bg-white/25 transition-all">
+            <ShoppingCartIcon className="h-10 w-10 text-white" />
+          </div>
+        </Link>
+        <Link to="/orders/queue"
+          className="rounded-2xl p-6 text-white flex items-center justify-between group transition-all duration-300 hover:-translate-y-1 hover:shadow-xl"
+          style={{ background: 'linear-gradient(135deg, #065f46 0%, #047857 100%)' }}
+        >
+          <div>
+            <h2 className="text-xl font-bold mb-1">Order Queue</h2>
+            <p className="text-white/70 text-sm">Manage active orders</p>
+          </div>
+          <div className="p-4 rounded-2xl bg-white/15 group-hover:bg-white/25 transition-all">
+            <ClipboardDocumentListIcon className="h-10 w-10 text-white" />
+          </div>
+        </Link>
+      </div>
 
-        {/* Quick Action Buttons */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-          <Link
-            to="/pos"
-            className="bg-blue-600 text-white rounded-lg p-6 hover:bg-blue-700 transition flex items-center justify-between group"
-          >
-            <div>
-              <h2 className="text-xl font-semibold mb-2">Point of Sale</h2>
-              <p className="text-blue-100">Take new orders</p>
-            </div>
-            <ShoppingCartIcon className="h-12 w-12 text-blue-300 group-hover:scale-110 transition-transform" />
-          </Link>
-          
-          <Link
-            to="/orders/queue"
-            className="bg-green-600 text-white rounded-lg p-6 hover:bg-green-700 transition flex items-center justify-between group"
-          >
-            <div>
-              <h2 className="text-xl font-semibold mb-2">Order Queue</h2>
-              <p className="text-green-100">Manage active orders</p>
-            </div>
-            <ClipboardDocumentListIcon className="h-12 w-12 text-green-300 group-hover:scale-110 transition-transform" />
-          </Link>
-        </div>
+      {/* Stats */}
+      <p className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Today's Overview</p>
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
+        {statItems.map((s) => <StatCard key={s.title} {...s} />)}
+      </div>
 
-        {/* Today's Stats */}
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Today's Overview</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 mb-6">
-          <StatCard
-            title="Active Orders"
-            value={stats.todayOrders}
-            icon={ShoppingCartIcon}
-            color="text-blue-600"
-            bgColor="bg-blue-100"
-          />
-          <StatCard
-            title="Revenue"
-            value={`$${formatCurrency(stats.todayRevenue)}`}
-            icon={CurrencyDollarIcon}
-            color="text-green-600"
-            bgColor="bg-green-100"
-          />
-          <StatCard
-            title="Pending"
-            value={stats.pendingOrders}
-            icon={ClockIcon}
-            color="text-yellow-600"
-            bgColor="bg-yellow-100"
-          />
-          <StatCard
-            title="Preparing"
-            value={stats.preparingOrders}
-            icon={ClockIcon}
-            color="text-blue-600"
-            bgColor="bg-blue-100"
-          />
-          <StatCard
-            title="Ready"
-            value={stats.readyOrders}
-            icon={CheckCircleIcon}
-            color="text-green-600"
-            bgColor="bg-green-100"
-          />
-          <StatCard
-            title="Completed"
-            value={stats.completedOrders}
-            icon={CheckCircleIcon}
-            color="text-gray-600"
-            bgColor="bg-gray-100"
-          />
-        </div>
-
-        {/* Two Column Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Active Orders with Customer Info */}
-          <div className="lg:col-span-2">
-            <div className="bg-white rounded-lg shadow">
-              <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-                <h2 className="text-lg font-semibold text-gray-900">Active Orders</h2>
-                {recentOrders.length > 0 && (
-                  <Link to="/orders/queue" className="text-sm text-blue-600 hover:text-blue-800">
-                    View all in queue →
-                  </Link>
-                )}
+      {/* Two Column */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Active Orders */}
+        <div className="lg:col-span-2 card overflow-hidden fade-in-up">
+          <div className="card-header justify-between">
+            <span className="flex items-center gap-2"><span>🧾</span> Active Orders</span>
+            {recentOrders.length > 0 && (
+              <Link to="/orders/queue" className="text-xs font-semibold" style={{ color: '#800000' }}>
+                View queue →
+              </Link>
+            )}
+          </div>
+          <div className="divide-y divide-gray-100">
+            {recentOrders.length === 0 ? (
+              <div className="py-16 text-center">
+                <ShoppingCartIcon className="h-12 w-12 mx-auto text-gray-300 mb-3" />
+                <p className="text-gray-500 font-medium">No active orders</p>
+                <p className="text-xs text-gray-400 mt-1">Go to Point of Sale to start</p>
+                <Link to="/pos" className="btn-primary inline-flex mt-4 text-sm">Take First Order</Link>
               </div>
-              <div className="divide-y divide-gray-200">
-                {recentOrders.length === 0 ? (
-                  <div className="px-6 py-12 text-center">
-                    <ShoppingCartIcon className="h-12 w-12 mx-auto text-gray-400 mb-3" />
-                    <p className="text-gray-500 font-medium">No active orders</p>
-                    <p className="text-sm text-gray-400 mt-1">
-                      Start by taking an order in Point of Sale
-                    </p>
-                    <Link
-                      to="/pos"
-                      className="inline-block mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                    >
-                      Take First Order
-                    </Link>
-                  </div>
-                ) : (
-                  recentOrders.map(order => (
-                    <div key={order.id} className="px-6 py-4 hover:bg-gray-50">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center space-x-4">
-                          {getStatusIcon(order.status)}
-                          <div>
-                            <p className="font-medium text-gray-900">#{order.order_number}</p>
-                            <div className="flex items-center text-sm text-gray-500 mt-1">
-                              <UserIcon className="h-4 w-4 mr-1 text-gray-400" />
-                              <span>{order.customer?.name || 'Unknown Customer'}</span>
-                            </div>
+            ) : (
+              recentOrders.map(order => {
+                const cfg = statusConfig[order.status] || statusConfig.completed;
+                return (
+                  <div key={order.id} className="px-5 py-4 hover:bg-gray-50 transition-colors"
+                    style={{ borderLeft: `3px solid ${cfg.border}` }}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div>
+                          <p className="font-semibold text-gray-900 text-sm">#{order.order_number}</p>
+                          <div className="flex items-center gap-1 text-xs text-gray-500 mt-0.5">
+                            <UserIcon className="h-3 w-3" />
+                            <span>{order.customer?.name || 'Unknown'}</span>
                           </div>
                         </div>
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
-                          {order.status}
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm font-bold text-gray-800">₱{formatCurrency(order.total_amount)}</span>
+                        <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold"
+                          style={{ background: cfg.bg, color: cfg.color }}>
+                          {cfg.label}
                         </span>
                       </div>
-                      <div className="ml-9 flex justify-between items-center">
-                        <p className="text-sm text-gray-600">
-                          {order.items?.length || 0} items
-                        </p>
-                        <p className="text-sm font-medium text-gray-900">
-                          ${formatCurrency(order.total_amount)}
-                        </p>
-                      </div>
-                      {order.customer?.email && (
-                        <p className="ml-9 text-xs text-gray-400 mt-1">
-                          {order.customer.email}
-                        </p>
-                      )}
                     </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Low Stock Alerts */}
-          <div>
-            <div className="bg-white rounded-lg shadow sticky top-4">
-              <div className="px-6 py-4 border-b border-gray-200 bg-yellow-50">
-                <h2 className="text-lg font-semibold text-yellow-800 flex items-center">
-                  <ExclamationTriangleIcon className="h-5 w-5 mr-2" />
-                  Low Stock Alerts
-                  {lowStockItems.length > 0 && (
-                    <span className="ml-2 bg-yellow-200 text-yellow-800 px-2 py-0.5 rounded-full text-xs">
-                      {lowStockItems.length}
-                    </span>
-                  )}
-                </h2>
-              </div>
-              <div className="divide-y divide-gray-200 max-h-96 overflow-y-auto">
-                {lowStockItems.length === 0 ? (
-                  <div className="px-6 py-12 text-center">
-                    <div className="text-4xl mb-3">✅</div>
-                    <p className="text-gray-500 font-medium">All stocked up!</p>
-                    <p className="text-sm text-gray-400 mt-1">
-                      No items need attention
-                    </p>
+                    <p className="text-xs text-gray-400 mt-1.5 ml-0">{order.items?.length || 0} item(s)</p>
                   </div>
-                ) : (
-                  lowStockItems.slice(0, 5).map(item => (
-                    <div key={item.id} className="px-6 py-4 hover:bg-gray-50">
-                      <p className="font-medium text-gray-900">{item.name}</p>
-                      <div className="mt-2 flex items-center justify-between">
-                        <p className="text-sm text-gray-500">
-                          Stock: <span className="text-red-600 font-medium">{item.stock_quantity}</span> / {item.low_stock_threshold}
-                        </p>
-                        <button 
-                          onClick={() => handleRestock(item.id, item.name)}
-                          className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200 transition"
-                        >
-                          Restock (10)
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-              {lowStockItems.length > 5 && (
-                <div className="px-6 py-3 bg-gray-50 text-center border-t">
-                  <Link to="/inventory" className="text-sm text-blue-600 hover:text-blue-800">
-                    View all {lowStockItems.length} alerts →
-                  </Link>
-                </div>
-              )}
-            </div>
+                );
+              })
+            )}
           </div>
         </div>
 
-        {/* Quick Tips */}
-        <div className="mt-6 bg-blue-50 rounded-lg p-4">
-          <h3 className="text-sm font-medium text-blue-800 mb-2">💡 Quick Tips</h3>
-          <ul className="text-sm text-blue-700 space-y-1">
-            <li>• Click <span className="font-medium">"Point of Sale"</span> to take new orders</li>
-            <li>• Check <span className="font-medium">"Order Queue"</span> to update order status</li>
-            <li>• Click <span className="font-medium">"Restock"</span> on low stock items to add 10 units</li>
-            <li>• Data auto-refreshes every 30 seconds</li>
-          </ul>
+        {/* Low Stock */}
+        <div className="card overflow-hidden fade-in-up">
+          <div className="card-header" style={{ background: '#fefce8', borderBottom: '1px solid #fef08a' }}>
+            <span className="flex items-center gap-2 text-yellow-800">
+              <ExclamationTriangleIcon className="h-4 w-4" />
+              Low Stock Alerts
+              {lowStockItems.length > 0 && (
+                <span className="ml-auto bg-yellow-200 text-yellow-800 text-[11px] font-bold px-2 py-0.5 rounded-full">
+                  {lowStockItems.length}
+                </span>
+              )}
+            </span>
+          </div>
+          <div className="divide-y divide-gray-100 max-h-96 overflow-y-auto">
+            {lowStockItems.length === 0 ? (
+              <div className="py-12 text-center">
+                <div className="text-4xl mb-2">✅</div>
+                <p className="text-gray-500 font-medium text-sm">All stocked up!</p>
+                <p className="text-xs text-gray-400 mt-0.5">No items need attention</p>
+              </div>
+            ) : (
+              lowStockItems.slice(0, 5).map(item => (
+                <div key={item.id} className="px-5 py-3 hover:bg-gray-50">
+                  <p className="font-semibold text-gray-800 text-sm">{item.name}</p>
+                  <div className="flex items-center justify-between mt-1.5">
+                    <p className="text-xs text-gray-500">
+                      Stock: <span className="text-red-600 font-bold">{item.stock_quantity}</span>
+                      <span className="text-gray-400"> / {item.low_stock_threshold}</span>
+                    </p>
+                    <button
+                      onClick={() => handleRestock(item.id, item.name)}
+                      className="text-[11px] font-semibold px-2.5 py-1 rounded-full transition-all"
+                      style={{ background: '#FEF2F2', color: '#800000' }}
+                      onMouseEnter={e => e.currentTarget.style.background = '#800000' || (e.currentTarget.style.color = '#fff')}
+                      onMouseLeave={e => { e.currentTarget.style.background = '#FEF2F2'; e.currentTarget.style.color = '#800000'; }}
+                    >
+                      + Restock
+                    </button>
+                  </div>
+                  <div className="mt-2 w-full bg-gray-200 rounded-full h-1.5">
+                    <div className="h-1.5 rounded-full bg-red-400 transition-all"
+                      style={{ width: `${Math.min(100, (item.stock_quantity / item.low_stock_threshold) * 100)}%` }} />
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         </div>
+      </div>
 
-        {/* Real-time status */}
-        <div className="mt-4 text-xs text-gray-400 text-right">
-          Last updated: {new Date().toLocaleTimeString()}
-          {error && ' • Using demo data'}
-        </div>
+      {/* Footer */}
+      <div className="mt-4 text-[11px] text-gray-400 text-right">
+        Auto-refreshes every 30s • Last updated: {new Date().toLocaleTimeString()}
+        {error && ' • Demo data'}
       </div>
     </div>
   );

@@ -1,16 +1,18 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
-import { AuthProvider, useAuth } from './Context/AuthContext'; // Add useAuth here
+import { AuthProvider, useAuth } from './Context/AuthContext';
 import { CartProvider } from './Context/CartContext';
 import ProtectedRoute from './components/Auth/ProtectedRoute';
 import Login from './components/Auth/Login';
+import LandingPage from './components/LandingPage';
 import Navbar from './components/Common/Navbar';
 import AdminDashboard from './components/Dashboard/AdminDashBoard';
 import Reports from './components/Dashboard/Reports';
 import POSInterface from './components/Orders/POSInterface';
 import OrderQueue from './components/Orders/OrderQueue';
 import MenuView from './components/Menu/MenuView';
+import InventoryLogs from './components/Dashboard/InventoryLogs';
 import './App.css';
 import './index.css';
 import CustomerOrders from './components/Customer/CustomerOrders';
@@ -25,16 +27,9 @@ function AppContent() {
     <div className="min-h-screen bg-gray-100">
       <Toaster position="top-right" />
       <Routes>
+        {/* Public landing page */}
+        <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<Login />} />
-        
-        <Route
-          path="/"
-          element={
-            <ProtectedRoute>
-              <Navigate to="/dashboard" replace />
-            </ProtectedRoute>
-          }
-        />
 
         <Route
           path="/dashboard"
@@ -105,6 +100,18 @@ function AppContent() {
               <>
                 <Navbar />
                 <Reports />
+              </>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/inventory-logs"
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <>
+                <Navbar />
+                <InventoryLogs />
               </>
             </ProtectedRoute>
           }
