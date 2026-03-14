@@ -3,7 +3,23 @@ import { useCart } from '../../Context/CartContext';
 import { orderService } from '../../Services/orderService';
 import api from '../../Services/api';
 import toast from 'react-hot-toast';
-import { MagnifyingGlassIcon, UserIcon, XMarkIcon } from '@heroicons/react/24/outline';
+
+/* Inline SVG icons — always render correctly */
+const SearchIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35m0 0A7 7 0 1116.65 16.65z" />
+  </svg>
+);
+const UserIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+  </svg>
+);
+const CloseIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+  </svg>
+);
 
 const POSInterface = () => {
   const [menuItems, setMenuItems] = useState([]);
@@ -210,8 +226,32 @@ const POSInterface = () => {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="flex h-screen bg-gray-100">
+        {/* Menu skeleton */}
+        <div className="flex-1 p-6 space-y-4 animate-pulse">
+          <div className="skeleton h-7 w-40 rounded mb-4" />
+          <div className="skeleton h-12 w-full rounded-xl" />
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {[...Array(8)].map((_, i) => (
+              <div key={i} className="card overflow-hidden">
+                <div className="skeleton h-32" style={{ borderRadius: 0 }} />
+                <div className="p-3 space-y-2">
+                  <div className="skeleton h-4 w-3/4 rounded" />
+                  <div className="skeleton h-3 w-full rounded" />
+                  <div className="skeleton h-5 w-20 rounded-full" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        {/* Cart skeleton */}
+        <div className="w-96 bg-white shadow-lg p-4 space-y-4 animate-pulse">
+          <div className="skeleton h-6 w-32 rounded" />
+          <div className="skeleton h-10 w-full rounded-xl" />
+          <div className="skeleton h-10 w-full rounded-xl" />
+          {[...Array(3)].map((_, i) => <div key={i} className="skeleton h-16 rounded-xl" />)}
+          <div className="skeleton h-12 w-full rounded-xl mt-auto" />
+        </div>
       </div>
     );
   }
@@ -237,8 +277,10 @@ const POSInterface = () => {
           
           {!selectedCustomer ? (
             <div className="relative">
-              <div className="flex items-center">
-                <UserIcon className="h-5 w-5 absolute left-3 top-3 text-gray-400" />
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
+                  <UserIcon />
+                </span>
                 <input
                   type="text"
                   placeholder="Search customer by name, email, or ID..."
@@ -248,7 +290,7 @@ const POSInterface = () => {
                     setShowCustomerDropdown(true);
                   }}
                   onFocus={() => setShowCustomerDropdown(true)}
-                  className="pl-10 w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  className="input-primary pl-9"
                 />
               </div>
               
@@ -296,42 +338,46 @@ const POSInterface = () => {
               )}
             </div>
           ) : (
-            <div className="flex items-center justify-between bg-blue-50 p-3 rounded-md border border-blue-200">
-              <div className="flex items-center space-x-2">
-                <UserIcon className="h-5 w-5 text-blue-500" />
+            <div className="flex items-center justify-between p-3 rounded-xl border" style={{ background: '#FEF2F2', borderColor: '#FECACA' }}>
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-full" style={{ background: '#800000' }}>
+                  <span className="text-white"><UserIcon /></span>
+                </div>
                 <div>
-                  <p className="font-medium text-gray-900">{selectedCustomer.name}</p>
-                  <p className="text-sm text-gray-600">{selectedCustomer.email}</p>
-                  <p className="text-xs text-blue-500">ID: {selectedCustomer.id}</p>
+                  <p className="font-semibold text-gray-900 text-sm">{selectedCustomer.name}</p>
+                  <p className="text-xs text-gray-500">{selectedCustomer.email}</p>
+                  <p className="text-xs" style={{ color: '#800000' }}>ID: {selectedCustomer.id}</p>
                 </div>
               </div>
               <button
                 onClick={handleClearCustomer}
-                className="text-sm text-red-600 hover:text-red-800 flex items-center"
+                className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg text-red-600 hover:bg-red-100 transition-colors"
               >
-                <XMarkIcon className="h-4 w-4 mr-1" />
-                Change
+                <CloseIcon /> Change
               </button>
             </div>
           )}
         </div>
 
         {/* Search and Filter */}
-        <div className="mb-6 flex space-x-4">
+        <div className="mb-6 flex gap-3">
           <div className="flex-1 relative">
-            <MagnifyingGlassIcon className="h-5 w-5 absolute left-3 top-3 text-gray-400" />
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
+              <SearchIcon />
+            </span>
             <input
               type="text"
-              placeholder="Search menu items..."
+              placeholder="Search menu items…"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              className="input-primary pl-9"
             />
           </div>
           <select
             value={selectedCategory}
             onChange={(e) => setSelectedCategory(e.target.value)}
-            className="rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+            className="input-primary"
+            style={{ width: '180px' }}
           >
             <option value="all">All Categories</option>
             {categories.map((category) => (
@@ -351,19 +397,20 @@ const POSInterface = () => {
                 className="bg-white rounded-lg shadow p-4 cursor-pointer hover:shadow-lg transition"
                 onClick={() => addToCart(item)}
               >
-                <div className="aspect-w-1 aspect-h-1 mb-4 bg-gray-200 rounded-lg flex items-center justify-center h-32">
-                  {!imageErrors[item.id] ? (
+                <div className="mb-3 rounded-xl overflow-hidden" style={{ height: '120px' }}>
+                  {item.image && !imageErrors[item.id] ? (
                     <img
-                      src={item.image || `https://via.placeholder.com/150/4A90E2/FFFFFF?text=${item.name.charAt(0)}`}
+                      src={item.image}
                       alt={item.name}
-                      className="object-cover rounded-lg w-full h-32"
+                      className="object-cover w-full h-full"
                       onError={() => handleImageError(item.id)}
                       loading="lazy"
+                      referrerPolicy="no-referrer"
                     />
                   ) : (
-                    <div className="w-full h-32 flex items-center justify-center bg-linear-to-br from-blue-500 to-blue-600 rounded-lg">
+                    <div className="w-full h-full flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #800000, #9B1C1C)' }}>
                       <span className="text-4xl font-bold text-white">
-                        {item.name.charAt(0)}
+                        {(item.name || '?').charAt(0)}
                       </span>
                     </div>
                   )}
@@ -371,8 +418,8 @@ const POSInterface = () => {
                 <h3 className="font-semibold text-gray-900">{item.name}</h3>
                 <p className="text-sm text-gray-500 truncate">{item.description}</p>
                 <div className="mt-2 flex justify-between items-center">
-                  <span className="text-lg font-bold text-blue-600">
-                    ${formatPrice(item.price)}
+                  <span className="text-lg font-bold" style={{ color: '#800000' }}>
+                    ₱{formatPrice(item.price)}
                   </span>
                   {item.stock_quantity <= item.low_stock_threshold && (
                     <span className="text-xs text-red-600">Low Stock</span>
@@ -417,7 +464,7 @@ const POSInterface = () => {
                 </div>
                 <div className="flex justify-between items-center mt-2">
                   <span className="text-sm text-gray-600">
-                    ${formatPrice(item.price)} each
+                    ₱{formatPrice(item.price)} each
                   </span>
                   <div className="flex items-center space-x-2">
                     <button
@@ -435,8 +482,8 @@ const POSInterface = () => {
                     </button>
                   </div>
                 </div>
-                <div className="text-right mt-1 font-medium">
-                  ${(parseFloat(formatPrice(item.price)) * item.quantity).toFixed(2)}
+                <div className="text-right mt-1 font-medium" style={{ color: '#800000' }}>
+                  ₱{(parseFloat(formatPrice(item.price)) * item.quantity).toFixed(2)}
                 </div>
               </div>
             ))
@@ -476,23 +523,33 @@ const POSInterface = () => {
             />
           </div>
 
-          <div className="mb-4">
+          <div className="mb-4 p-3 rounded-xl" style={{ background: '#FEF2F2' }}>
             <div className="flex justify-between text-lg font-bold">
-              <span>Total:</span>
-              <span>${getTotal().toFixed(2)}</span>
+              <span style={{ color: '#800000' }}>Total:</span>
+              <span style={{ color: '#800000' }}>₱{getTotal().toFixed(2)}</span>
             </div>
           </div>
 
           <button
             onClick={handleSubmitOrder}
             disabled={processing || items.length === 0 || !selectedCustomer}
-            className={`w-full py-3 rounded-lg font-semibold ${
-              processing || items.length === 0 || !selectedCustomer
-                ? 'bg-gray-400 cursor-not-allowed'
-                : 'bg-blue-600 hover:bg-blue-700 text-white'
-            }`}
+            className="w-full py-3 rounded-xl font-bold text-white transition-all"
+            style={{
+              background: (processing || items.length === 0 || !selectedCustomer)
+                ? '#9ca3af'
+                : 'linear-gradient(135deg, #800000, #9B1C1C)',
+              cursor: (processing || items.length === 0 || !selectedCustomer) ? 'not-allowed' : 'pointer',
+            }}
           >
-            {processing ? 'Processing...' : 'Complete Order'}
+            {processing ? (
+              <span className="flex items-center justify-center gap-2">
+                <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                </svg>
+                Processing…
+              </span>
+            ) : 'Complete Order'}
           </button>
         </div>
       </div>

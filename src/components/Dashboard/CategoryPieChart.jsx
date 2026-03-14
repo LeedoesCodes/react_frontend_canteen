@@ -9,7 +9,7 @@ import {
 } from 'recharts';
 import api from '../../Services/api';
 
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D'];
+const COLORS = ['#800000', '#9B1C1C', '#c0392b', '#e74c3c', '#EF9A9A', '#FFCDD2'];
 
 const CategoryPieChart = ({ dateRange }) => {
   const [data, setData] = useState([]);
@@ -28,12 +28,12 @@ const CategoryPieChart = ({ dateRange }) => {
           to_date: dateRange.to,
         },
       });
-      
-      const formattedData = response.data.map((item) => ({
+
+      const formattedData = (response.data || []).map((item) => ({
         name: item.name,
-        value: Number(item.revenue),
+        value: Number(item.revenue) || 0,
       }));
-      
+
       setData(formattedData);
     } catch (error) {
       console.error('Failed to fetch category data:', error);
@@ -42,10 +42,28 @@ const CategoryPieChart = ({ dateRange }) => {
     }
   };
 
+  const formatPeso = (value) => `₱${Number(value).toFixed(2)}`;
+
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      <div className="animate-pulse space-y-3 py-4">
+        <div className="flex justify-center">
+          <div className="skeleton rounded-full" style={{ width: 160, height: 160 }} />
+        </div>
+        <div className="flex justify-center gap-4">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="skeleton h-3 w-16 rounded" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (data.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 text-gray-400">
+        <span className="text-4xl mb-2">🥧</span>
+        <p className="text-sm">No category data for this period</p>
       </div>
     );
   }
@@ -58,8 +76,8 @@ const CategoryPieChart = ({ dateRange }) => {
           cx="50%"
           cy="50%"
           labelLine={false}
-          label={(entry) => `${entry.name}: $${entry.value.toFixed(2)}`}
-          outerRadius={80}
+          label={({ name, value }) => `${name}: ₱${Number(value).toFixed(0)}`}
+          outerRadius={90}
           fill="#8884d8"
           dataKey="value"
         >
@@ -67,7 +85,7 @@ const CategoryPieChart = ({ dateRange }) => {
             <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
           ))}
         </Pie>
-        <Tooltip />
+        <Tooltip formatter={(value) => [`₱${Number(value).toFixed(2)}`, 'Revenue']} />
         <Legend />
       </PieChart>
     </ResponsiveContainer>

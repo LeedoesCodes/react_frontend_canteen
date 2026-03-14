@@ -30,13 +30,13 @@ const SalesChart = ({ dateRange }) => {
           group_by: 'day',
         },
       });
-      
+
       const formattedData = response.data.map((item) => ({
         date: format(parseISO(item.date), 'MMM dd'),
         revenue: Number(item.total_revenue),
         orders: Number(item.total_orders),
       }));
-      
+
       setData(formattedData);
     } catch (error) {
       console.error('Failed to fetch sales data:', error);
@@ -62,7 +62,7 @@ const SalesChart = ({ dateRange }) => {
         <YAxis yAxisId="right" orientation="right" stroke="#82ca9d" />
         <Tooltip />
         <Legend />
-        <Bar yAxisId="left" dataKey="revenue" fill="#8884d8" name="Revenue ($)" />
+        <Bar yAxisId="left" dataKey="revenue" fill="#8884d8" name="Revenue (₱)" />
         <Bar yAxisId="right" dataKey="orders" fill="#82ca9d" name="Orders" />
       </BarChart>
     </ResponsiveContainer>
