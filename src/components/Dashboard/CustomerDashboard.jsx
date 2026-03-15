@@ -66,8 +66,9 @@ const CustomerDashboard = () => {
   const formatCurrency = (v) => (parseFloat(v) || 0).toFixed(2);
   const handleImageError = (id) => setImageErrors(prev => ({ ...prev, [id]: true }));
 
-  // Cleanup on unmount
+  // Lifecycle management
   useEffect(() => {
+    isMounted.current = true;
     return () => {
       isMounted.current = false;
       if (refreshInterval.current) {
@@ -79,10 +80,10 @@ const CustomerDashboard = () => {
   const fetchCustomerData = useCallback(async (showToast = false) => {
     try {
       const ordersRes = await api.get('/customer/orders');
-      
       if (!isMounted.current) return;
       
-      const orders = ordersRes.data || [];
+      const ordersRaw = ordersRes.data || [];
+      const orders = Array.isArray(ordersRaw) ? ordersRaw : ordersRaw.data || [];
       
       // Calculate stats
       const totalSpent = orders.reduce((s, o) => s + (parseFloat(o.total_amount) || 0), 0);
@@ -118,12 +119,13 @@ const CustomerDashboard = () => {
 
       setLastUpdated(new Date());
 
-      // Only fetch menu items if needed (they don't change often)
       if (menuItems.length === 0) {
-        const menuRes = await api.get('/menu?available=true');
-        if (isMounted.current) {
-          setMenuItems((menuRes.data || []).slice(0, 4));
-        }
+        api.get('/menu?available=true').then(menuRes => {
+          if (!isMounted.current) return;
+          const menuRaw = menuRes.data || [];
+          const menuArray = Array.isArray(menuRaw) ? menuRaw : menuRaw.data || Object.values(menuRaw || {});
+          setMenuItems(menuArray.slice(0, 4));
+        }).catch(console.error);
       }
 
       if (showToast) {
@@ -134,31 +136,34 @@ const CustomerDashboard = () => {
       console.error('Error fetching customer data:', error);
       if (!isMounted.current) return;
       
-      // Only set fallback data if we have no data at all
-      if (stats.totalOrders === 0) {
-        setStats({ 
-          totalSpent: 156.50, 
-          totalOrders: 3, 
-          pendingOrders: 1, 
-          favoriteItem: { name: 'Chicken Rice', count: 2 } 
-        });
-        setRecentOrders([
-          { id: 1, order_number: 'ORD-001', total_amount: 45.00, status: 'delivered', items: [{}], created_at: new Date().toISOString() },
-          { id: 2, order_number: 'ORD-002', total_amount: 78.50, status: 'preparing', items: [{},{}], created_at: new Date().toISOString() }
-        ]);
-        setMenuItems([
-          { id: 1, name: 'Chicken Rice',  price: 45.00, description: 'Steamed chicken with fragrant white rice', image: null },
-          { id: 2, name: 'Nasi Lemak',    price: 50.00, description: 'Coconut rice with sambal & fried egg',    image: null },
-          { id: 3, name: 'Mee Goreng',    price: 48.00, description: 'Spicy stir-fried yellow noodles',         image: null },
-          { id: 4, name: 'Chicken Chop',  price: 65.00, description: 'Grilled chicken with crispy fries',       image: null }
-        ]);
-      }
+      // Setting fallback data via state update to avoid stale closures
+      setStats(prev => {
+        if (prev.totalOrders === 0) {
+          setRecentOrders([
+            { id: 1, order_number: 'ORD-001', total_amount: 45.00, status: 'delivered', items: [{}], created_at: new Date().toISOString() },
+            { id: 2, order_number: 'ORD-002', total_amount: 78.50, status: 'preparing', items: [{},{}], created_at: new Date().toISOString() }
+          ]);
+          setMenuItems([
+            { id: 1, name: 'Chicken Rice',  price: 45.00, description: 'Steamed chicken with fragrant white rice', image: null },
+            { id: 2, name: 'Nasi Lemak',    price: 50.00, description: 'Coconut rice with sambal & fried egg',    image: null },
+            { id: 3, name: 'Mee Goreng',    price: 48.00, description: 'Spicy stir-fried yellow noodles',         image: null },
+            { id: 4, name: 'Chicken Chop',  price: 65.00, description: 'Grilled chicken with crispy fries',       image: null }
+          ]);
+          return { 
+            totalSpent: 156.50, 
+            totalOrders: 3, 
+            pendingOrders: 1, 
+            favoriteItem: { name: 'Chicken Rice', count: 2 } 
+          };
+        }
+        return prev;
+      });
     } finally {
       if (isMounted.current) {
         setLoading(false);
       }
     }
-  }, [menuItems.length, stats.totalOrders]);
+  }, []);
 
   // Initial fetch and setup real-time updates
   useEffect(() => {
@@ -192,6 +197,7 @@ const CustomerDashboard = () => {
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('order-status-changed', handleOrderUpdate);
       window.removeEventListener('new-order-placed', handleOrderUpdate);
+      if (refreshInterval.current) clearInterval(refreshInterval.current);
     };
   }, [fetchCustomerData]);
 
