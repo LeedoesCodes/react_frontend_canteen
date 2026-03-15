@@ -50,6 +50,7 @@ const statusConfig = {
   ready:     { color: '#16a34a', bg: '#dcfce7', border: '#16a34a', label: 'Ready' },
   completed: { color: '#6b7280', bg: '#f3f4f6', border: '#9ca3af', label: 'Completed' },
   delivered: { color: '#6b7280', bg: '#f3f4f6', border: '#9ca3af', label: 'Delivered' },
+  cancelled: { color: '#991b1b', bg: '#fee2e2', border: '#ef4444', label: 'Cancelled' },
 };
 
 const CustomerDashboard = () => {
@@ -85,13 +86,16 @@ const CustomerDashboard = () => {
       const ordersRaw = ordersRes.data || [];
       const orders = Array.isArray(ordersRaw) ? ordersRaw : ordersRaw.data || [];
       
-      // Calculate stats
-      const totalSpent = orders.reduce((s, o) => s + (parseFloat(o.total_amount) || 0), 0);
+      // Separate non-cancelled (billed) orders for financial stats
+      const billedOrders = orders.filter(o => o.status !== 'cancelled');
+
+      // Calculate stats — exclude cancelled from money/count
+      const totalSpent = billedOrders.reduce((s, o) => s + (parseFloat(o.total_amount) || 0), 0);
       const pendingOrders = orders.filter(o => ['pending', 'preparing', 'ready'].includes(o.status)).length;
 
-      // Calculate favorite item
+      // Calculate favorite item from non-cancelled orders only
       const itemCounts = {};
-      orders.forEach(order => {
+      billedOrders.forEach(order => {
         (order.items || []).forEach(item => {
           const name = item.menu_item?.name || 'Unknown';
           itemCounts[name] = (itemCounts[name] || 0) + (item.quantity || 0);
@@ -108,11 +112,12 @@ const CustomerDashboard = () => {
 
       setStats({ 
         totalSpent, 
-        totalOrders: orders.length, 
+        totalOrders: billedOrders.length,  // only non-cancelled
         pendingOrders, 
         favoriteItem 
       });
       
+      // Recent orders shows ALL including cancelled so customer can see their history
       setRecentOrders([...orders]
         .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
         .slice(0, 3));
